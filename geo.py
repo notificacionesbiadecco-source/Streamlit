@@ -12,8 +12,8 @@ st.title("GPS Actual + Selecciona Dirección Cercana")
 
 
 # ── Conexión Supabase ──────────────────────────────────────────────
-SUPABASE_URL = "https://wabjivhfazhiufnqhdmq.supabase.co"
-SUPABASE_KEY = "sb_publishable_R-AaS0tqpbFL8aQu52b-xg_5djJvc_p"
+SUPABASE_URL = "https://rtzfscetcoyxeodqwpbd.supabase.co"
+SUPABASE_KEY = "sb_publishable_aeRDjSzc5gmcFkT13mmZvA_jKWEaQZy"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
