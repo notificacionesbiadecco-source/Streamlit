@@ -152,7 +152,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
-col1.metric("🌐 Latitud",  f"{my_lat:.6f}")
+col1.metric("📍 Latitud",  f"{my_lat:.6f}")
 col2.metric("📍 Longitud", f"{my_lon:.6f}")
 
 if st.button("🔄 Actualizar ubicación"):
@@ -169,10 +169,10 @@ layer = pdk.Layer(
     data=[{"lat": my_lat, "lon": my_lon}],
     get_position="[lon, lat]",
     get_color=[220, 50, 50, 200],
-    get_radius=30,
+    get_radius=20,
     radius_min_pixels=6,
     radius_max_pixels=18,
-    pickable=True,
+    # pickable=True,
 )
 
 view_state = pdk.ViewState(
