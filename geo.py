@@ -7,6 +7,7 @@ from datetime import datetime
 from streamlit_js_eval import streamlit_js_eval
 import pydeck as pdk
 import os
+from streamlit_searchbox import st_searchbox
 
 
 st.title("GPS Actual + Selecciona Dirección Cercana")
@@ -226,33 +227,32 @@ df_pdv = cargar_pdv()
 st.markdown(f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>", unsafe_allow_html=True)
 
 
-# ── 4. Selectbox con búsqueda + filtro para móvil ─────────────────
+# ── 4. Searchbox con filtro en tiempo real ────────────────────────
+def buscar_pdv(searchterm: str) -> list:
+    if not searchterm:
+        return []
+    mask = df_pdv["_label"].str.contains(searchterm.strip(), case=False, na=False)
+    resultados = df_pdv[mask]
+    # Retorna tuplas (texto visible, label completo)
+    return [
+        (
+            f"{row['pdv']}  —  {row['direccion']}",  # lo que ve el usuario
+            row["_label"]                             # valor interno
+        )
+        for _, row in resultados.iterrows()
+    ]
 
-# Campo de texto para filtrar
-filtro = st.text_input("🔍 Escribe para filtrar (nombre, EAN, ciudad, dirección):", placeholder="Ej: Éxito, 7702...")
-
-# Filtrar opciones según lo que escriba
-if filtro.strip():
-    opciones_filtradas = df_pdv[
-        df_pdv["_label"].str.contains(filtro.strip(), case=False, na=False)
-    ]["_label"].tolist()
-else:
-    opciones_filtradas = []
-
-if not opciones_filtradas and filtro.strip():
-    st.warning("⚠️ No se encontraron resultados para tu búsqueda.")
-    st.stop()
-
-if not filtro.strip():
-    st.info("👆 Escribe algo para buscar un punto de venta.")
-    st.stop()
-
-# Selectbox solo con las opciones filtradas (pocas = fácil de ver en móvil)
-dir_seleccionada_label = st.selectbox(
-    "📍 Selecciona el punto de venta:",
-    opciones_filtradas,
-    format_func=lambda x: x.split("  |  ")[0] + " — " + x.split("  |  ")[2]  # muestra: PDV — Dirección
+dir_seleccionada_label = st_searchbox(
+    buscar_pdv,
+    placeholder="🔍 Escribe nombre, EAN, dirección o ciudad...",
+    label="Busca el punto de venta:",
+    key="searchbox_pdv",
+    default_options=[],
 )
+
+if not dir_seleccionada_label:
+    st.info("👆 Escribe para buscar un punto de venta.")
+    st.stop()
 
 # Fila seleccionada
 row = df_pdv[df_pdv["_label"] == dir_seleccionada_label].iloc[0]
