@@ -103,9 +103,7 @@ if st.session_state["my_lat"] is None:
                 if code == 1:
                     st.warning(
                         "🔒 **Permiso de ubicación denegado.**\n\n"
-                        "Debes permitir el acceso a la ubicación en tu navegador:\n"
-                        "- Chrome: haz clic en el 🔒 de la barra de dirección → *Ubicación* → Permitir\n"
-                        "- Firefox: ícono de ubicación en la barra → Permitir\n\n"
+                        "Debes permitir el acceso a la ubicación en tu navegador o celular:\n"
                         "Luego recarga la página e intenta de nuevo."
                     )
                 elif code == 2:
