@@ -226,17 +226,33 @@ df_pdv = cargar_pdv()
 st.markdown(f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>", unsafe_allow_html=True)
 
 
-# ── 4. Selectbox con búsqueda unificada ───────────────────────────
-PLACEHOLDER = "🔍"
+# ── 4. Selectbox con búsqueda + filtro para móvil ─────────────────
 
-dir_seleccionada_label = st.selectbox(
-    "🔍 Busca por nombre PDV, dirección, EAN o ciudad:",
-    [PLACEHOLDER] + df_pdv["_label"].tolist(),
-)
+# Campo de texto para filtrar
+filtro = st.text_input("🔍 Escribe para filtrar (nombre, EAN, ciudad, dirección):", placeholder="Ej: Éxito, 7702...")
 
-if dir_seleccionada_label == PLACEHOLDER:
-    st.info("👆 Selecciona un punto de venta para continuar.")
+# Filtrar opciones según lo que escriba
+if filtro.strip():
+    opciones_filtradas = df_pdv[
+        df_pdv["_label"].str.contains(filtro.strip(), case=False, na=False)
+    ]["_label"].tolist()
+else:
+    opciones_filtradas = []
+
+if not opciones_filtradas and filtro.strip():
+    st.warning("⚠️ No se encontraron resultados para tu búsqueda.")
     st.stop()
+
+if not filtro.strip():
+    st.info("👆 Escribe algo para buscar un punto de venta.")
+    st.stop()
+
+# Selectbox solo con las opciones filtradas (pocas = fácil de ver en móvil)
+dir_seleccionada_label = st.selectbox(
+    "📍 Selecciona el punto de venta:",
+    opciones_filtradas,
+    format_func=lambda x: x.split("  |  ")[0] + " — " + x.split("  |  ")[2]  # muestra: PDV — Dirección
+)
 
 # Fila seleccionada
 row = df_pdv[df_pdv["_label"] == dir_seleccionada_label].iloc[0]
