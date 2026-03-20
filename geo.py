@@ -216,28 +216,20 @@ dir_seleccionada = st.selectbox("Selecciona una dirección:", opciones_dir)
 if dir_seleccionada:
     idx = opciones_dir.index(dir_seleccionada)
     lugar_sel = lugares[idx]
-    # lat_sel, lon_sel = lugar_sel.latitude, lugar_sel.longitude
-
-    # dist = geodesic((my_lat, my_lon), (lat_sel, lon_sel)).km
-    # st.success(f"✅ **{dir_seleccionada}** — Distancia: {dist:.2f} km")
-
-    # df_mapa = pd.DataFrame([
-    #     {"lat": my_lat,  "lon": my_lon},
-    #     {"lat": lat_sel, "lon": lon_sel}
-    # ])
-    # st.map(df_mapa, zoom=13)
 
     # ── 5. Guardar en Supabase ─────────────────────────────────────
     if "registro_guardado" not in st.session_state:
         st.session_state["registro_guardado"] = False
 
-    # Si ya se guardó, mostrar solo el botón de actualizar
     if st.session_state["registro_guardado"]:
         st.success("✅ Registro guardado correctamente en Supabase")
-        st.balloons() if st.session_state.get("mostrar_balloons") else None
-        st.session_state["mostrar_balloons"] = False  # solo lanza balloons una vez
 
-        if st.button("🔄 Actualizar ubicación"):
+        # ✅ CORREGIDO — if normal, no expresión ternaria
+        if st.session_state.get("mostrar_balloons"):
+            st.balloons()
+            st.session_state["mostrar_balloons"] = False
+
+        if st.button("🔄 Actualizar ubicación", key="btn_actualizar_post_guardado"):
             st.session_state["my_lat"] = None
             st.session_state["my_lon"] = None
             st.session_state.pop("get_gps", None)
