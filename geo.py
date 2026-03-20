@@ -6,6 +6,7 @@ from supabase import create_client
 from datetime import datetime
 from streamlit_js_eval import streamlit_js_eval
 import pydeck as pdk
+import os
 
 
 st.title("GPS Actual + Selecciona Dirección Cercana")
@@ -44,6 +45,7 @@ st.markdown("""
 if "my_lat" not in st.session_state:
     st.session_state["my_lat"] = None
     st.session_state["my_lon"] = None
+
 
 if st.session_state["my_lat"] is None:
 
@@ -100,7 +102,7 @@ if st.session_state["my_lat"] is None:
                 if code == 1:
                     st.warning(
                         "🔒 **Permiso de ubicación denegado.**\n\n"
-                        "Debes permitir el acceso a la ubicación en tu navegador o celular:\n\n"
+                        "Debes permitir el acceso a la ubicación en tu navegador o celular.\n\n"
                         "Luego recarga la página e intenta de nuevo."
                     )
                 elif code == 2:
@@ -108,8 +110,7 @@ if st.session_state["my_lat"] is None:
                         "📡 **No se pudo obtener tu posición.**\n\n"
                         "Posibles causas:\n"
                         "- **GPS apagado** en tu dispositivo → actívalo en Ajustes → Ubicación\n"
-                        "- Sin señal GPS, WiFi o red móvil disponible\n"
-                        "- Estás en un entorno sin cobertura\n\n"
+                        "- Sin señal GPS, WiFi o red móvil disponible\n\n"
                         "Enciende el GPS, conéctate a una red y vuelve a intentarlo."
                     )
                 elif code == 3:
@@ -163,7 +164,7 @@ if st.button("🔄 Actualizar ubicación"):
     st.rerun()
 
 
-# ── Mapa con marcador pequeño (pydeck, sin token) ─────────────────
+# ── Mapa con marcador pequeño (pydeck, sin token) ──────────────────
 layer = pdk.Layer(
     "ScatterplotLayer",
     data=[{"lat": my_lat, "lon": my_lon}],
@@ -189,85 +190,132 @@ st.pydeck_chart(pdk.Deck(
 ))
 
 
-# ── 3. Lista de direcciones ────────────────────────────────────────
-direcciones = [
-    "Calle 100 #10-20, Bogotá, Colombia",
-    "Carrera 7 #50-10, Bogotá, Colombia",
-    "Av. 19 #125-45, Bogotá, Colombia",
-    "Carrera 103b # 154 - 61, Bogotá, Colombia",
-]
+# ── 3. Carga del Excel desde el servidor ──────────────────────────
+# 📁 Pon el archivo en la misma carpeta que app.py o ajusta la ruta
+EXCEL_PATH = os.path.join(os.path.dirname(__file__), "FORMATO.xlsx")
 
 
 @st.cache_data
-def geocode_lista(dirs):
-    geolocator = Nominatim(user_agent="dairon_geoapp")
-    return [geolocator.geocode(d) for d in dirs]
+def cargar_pdv():
+    try:
+        df = pd.read_excel(EXCEL_PATH)
+    except FileNotFoundError:
+        st.error(f"❌ No se encontró el archivo: **{EXCEL_PATH}**. Verifica que esté en el servidor.")
+        st.stop()
+
+    df.columns = df.columns.str.strip().str.lower()
+
+    required = {"direccion", "ciudad", "pdv", "ean_pdv"}
+    missing = required - set(df.columns)
+    if missing:
+        st.error(f"❌ Faltan columnas en el Excel: {', '.join(missing)}")
+        st.stop()
+
+    df["ean_pdv"] = df["ean_pdv"].astype(str).str.strip()
+    df["_label"] = (
+        df["pdv"].astype(str) + "  |  " +
+        df["ean_pdv"].astype(str) + "  |  " +
+        df["direccion"].astype(str) + "  |  " +
+        df["ciudad"].astype(str)
+    )
+    return df
 
 
-with st.spinner("🗺️ Geocodificando direcciones…"):
-    lugares = geocode_lista(direcciones)
+df_pdv = cargar_pdv()
+
+st.markdown(f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>", unsafe_allow_html=True)
 
 
-# ── 4. Selectbox ───────────────────────────────────────────────────
-opciones_dir = [d for d, p in zip(direcciones, lugares) if p]
-dir_seleccionada = st.selectbox("Selecciona una dirección:", opciones_dir)
+# ── 4. Selectbox con búsqueda unificada ───────────────────────────
+PLACEHOLDER = "🔍"
+
+dir_seleccionada_label = st.selectbox(
+    "🔍 Busca por nombre PDV, dirección, EAN o ciudad:",
+    [PLACEHOLDER] + df_pdv["_label"].tolist(),
+)
+
+if dir_seleccionada_label == PLACEHOLDER:
+    st.info("👆 Selecciona un punto de venta para continuar.")
+    st.stop()
+
+# Fila seleccionada
+row = df_pdv[df_pdv["_label"] == dir_seleccionada_label].iloc[0]
+
+direccion_sel = str(row["direccion"])
+ciudad_sel    = str(row["ciudad"])
+pdv_sel       = str(row["pdv"])
+ean_pdv_sel   = str(row["ean_pdv"])
+
+# Tarjeta de información del PDV seleccionado
+st.markdown(f"""
+<div style="
+    background: linear-gradient(135deg, #0d1b2a, #1b2a3b);
+    border: 1px solid #0066ff; border-radius: 12px;
+    padding: 16px 20px; margin: 0.5rem 0 1rem 0;
+    line-height: 1.8;
+">
+    <b style='color:#00c6ff'>🏪 PDV:</b> <span style='color:#fff'>{pdv_sel}</span><br>
+    <b style='color:#00c6ff'>🏙️ Ciudad:</b> <span style='color:#fff'>{ciudad_sel}</span><br>
+    <b style='color:#00c6ff'>📦 EAN:</b> <span style='color:#fff'>{ean_pdv_sel}</span><br>
+    <b style='color:#00c6ff'>🗺️ Dirección:</b> <span style='color:#fff'>{direccion_sel}</span>
+</div>
+""", unsafe_allow_html=True)
 
 
-if dir_seleccionada:
-    idx = opciones_dir.index(dir_seleccionada)
-    lugar_sel = lugares[idx]
+# ── 5. Guardar en Supabase ─────────────────────────────────────────
+if "registro_guardado" not in st.session_state:
+    st.session_state["registro_guardado"] = False
 
-    # ── 5. Guardar en Supabase ─────────────────────────────────────
-    if "registro_guardado" not in st.session_state:
+if st.session_state["registro_guardado"]:
+    st.success("✅ Registro guardado correctamente en Supabase")
+
+    if st.session_state.get("mostrar_balloons"):
+        st.balloons()
+        st.session_state["mostrar_balloons"] = False
+
+    if st.button("🔄 Actualizar ubicación", key="btn_actualizar_post_guardado"):
+        st.session_state["my_lat"] = None
+        st.session_state["my_lon"] = None
+        st.session_state.pop("get_gps", None)
+        st.session_state["gps_triggered"] = False
         st.session_state["registro_guardado"] = False
+        st.rerun()
 
-    if st.session_state["registro_guardado"]:
-        st.success("✅ Registro guardado correctamente en Supabase")
+else:
+    if st.button("💾 Guardar registro en servidor"):
+        registro = {
+            "created_at":             datetime.now().isoformat(),
+            "lat_actual":             my_lat,
+            "lon_actual":             my_lon,
+            "direccion_seleccionada": direccion_sel,
+            "ciudad":                 ciudad_sel,
+            "pdv":                    pdv_sel,
+            "ean_pvd":                ean_pdv_sel,  # ⚠️ nombre exacto en tu tabla Supabase
+        }
+        try:
+            response = supabase.table("registros_gps").insert(registro).execute()
+            if response.data:
+                st.session_state["registro_guardado"] = True
+                st.session_state["mostrar_balloons"] = True
+                st.rerun()
+            else:
+                st.error("❌ No se pudo guardar el registro")
+        except Exception as e:
+            st.error(f"❌ Error al guardar: {e}")
 
-        # ✅ CORREGIDO — if normal, no expresión ternaria
-        if st.session_state.get("mostrar_balloons"):
-            st.balloons()
-            st.session_state["mostrar_balloons"] = False
 
-        if st.button("🔄 Actualizar ubicación", key="btn_actualizar_post_guardado"):
-            st.session_state["my_lat"] = None
-            st.session_state["my_lon"] = None
-            st.session_state.pop("get_gps", None)
-            st.session_state["gps_triggered"] = False
-            st.session_state["registro_guardado"] = False
-            st.rerun()
-
-    else:
-        if st.button("💾 Guardar registro en servidor"):
-            registro = {
-                "created_at":             datetime.now().isoformat(),
-                "lat_actual":             my_lat,
-                "lon_actual":             my_lon,
-                "direccion_seleccionada": dir_seleccionada,
-            }
-            try:
-                response = supabase.table("registros_gps").insert(registro).execute()
-                if response.data:
-                    st.session_state["registro_guardado"] = True
-                    st.session_state["mostrar_balloons"] = True
-                    st.rerun()
-                else:
-                    st.error("❌ No se pudo guardar el registro")
-            except Exception as e:
-                st.error(f"❌ Error al guardar: {e}")
-
-    # # ── 6. Historial ───────────────────────────────────────────────
-    # with st.expander("📋 Ver historial de registros"):
-    #     try:
-    #         response = supabase.table("registros_gps") \
-    #                            .select("*") \
-    #                            .order("created_at", desc=True) \
-    #                            .limit(50) \
-    #                            .execute()
-    #         if response.data:
-    #             df_hist = pd.DataFrame(response.data)
-    #             st.dataframe(df_hist, use_container_width=True)
-    #         else:
-    #             st.info("Aún no hay registros guardados.")
-    #     except Exception as e:
-    #         st.error(f"❌ Error al cargar historial: {e}")
+# ── 6. Historial ───────────────────────────────────────────────────
+# with st.expander("📋 Ver historial de registros"):
+#     try:
+#         response = supabase.table("registros_gps") \
+#                            .select("*") \
+#                            .order("created_at", desc=True) \
+#                            .limit(50) \
+#                            .execute()
+#         if response.data:
+#             df_hist = pd.DataFrame(response.data)
+#             st.dataframe(df_hist, use_container_width=True)
+#         else:
+#             st.info("Aún no hay registros guardados.")
+#     except Exception as e:
+#         st.error(f"❌ Error al cargar historial: {e}")
