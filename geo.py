@@ -6,12 +6,15 @@ from supabase import create_client
 from datetime import datetime
 from streamlit_js_eval import streamlit_js_eval
 
+
 st.title("GPS Actual + Selecciona Dirección Cercana")
+
 
 # ── Conexión Supabase ──────────────────────────────────────────────
 SUPABASE_URL = "https://wabjivhfazhiufnqhdmq.supabase.co"
 SUPABASE_KEY = "sb_publishable_R-AaS0tqpbFL8aQu52b-xg_5djJvc_p"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 # ── CSS botón de carga ─────────────────────────────────────────────
 st.markdown("""
@@ -35,6 +38,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ── 1. Captura GPS ─────────────────────────────────────────────────
 if "my_lat" not in st.session_state:
     st.session_state["my_lat"] = None
@@ -46,14 +50,12 @@ if st.session_state["my_lat"] is None:
         st.session_state["gps_triggered"] = False
 
     if not st.session_state["gps_triggered"]:
-        # Botón grande nativo de Streamlit
         st.markdown("<br>", unsafe_allow_html=True)
         col = st.columns([1, 3, 1])[1]
         if col.button("📍  Obtener mi ubicación GPS", use_container_width=True, type="primary"):
             st.session_state["gps_triggered"] = True
             st.rerun()
     else:
-        # Mostrar spinner y ejecutar JS de geolocalización
         st.markdown("""
         <div class="gps-loading-box">
             <div class="gps-spinner"></div>
@@ -62,12 +64,12 @@ if st.session_state["my_lat"] is None:
         </div>
         """, unsafe_allow_html=True)
 
-        # ✅ streamlit_js_eval ejecuta JS real en el navegador y retorna el resultado a Python
+        # ── JS: retorna { lat, lon } en éxito o { error_code, error_msg } en fallo
         coords = streamlit_js_eval(
             js_expressions="""
-                new Promise((resolve, reject) => {
+                new Promise((resolve) => {
                     if (!navigator.geolocation) {
-                        reject("GPS no disponible");
+                        resolve({ error_code: 0, error_msg: "Tu navegador no soporta geolocalización." });
                         return;
                     }
                     navigator.geolocation.getCurrentPosition(
@@ -75,7 +77,7 @@ if st.session_state["my_lat"] is None:
                             lat: pos.coords.latitude,
                             lon: pos.coords.longitude
                         }),
-                        (err) => reject(err.message),
+                        (err) => resolve({ error_code: err.code, error_msg: err.message }),
                         { enableHighAccuracy: true, timeout: 15000 }
                     );
                 })
@@ -85,17 +87,60 @@ if st.session_state["my_lat"] is None:
 
         if coords is not None:
             if isinstance(coords, dict) and "lat" in coords:
+                # ✅ Éxito
                 st.session_state["my_lat"] = coords["lat"]
                 st.session_state["my_lon"] = coords["lon"]
                 st.session_state["gps_triggered"] = False
                 st.rerun()
+
+            elif isinstance(coords, dict) and "error_code" in coords:
+                code = coords["error_code"]
+                msg  = coords.get("error_msg", "Error desconocido")
+
+                st.session_state["gps_triggered"] = False
+
+                # ── Mensajes según código de error ──────────────────
+                if code == 1:
+                    st.warning(
+                        "🔒 **Permiso de ubicación denegado.**\n\n"
+                        "Debes permitir el acceso a la ubicación en tu navegador:\n"
+                        "- Chrome: haz clic en el 🔒 de la barra de dirección → *Ubicación* → Permitir\n"
+                        "- Firefox: ícono de ubicación en la barra → Permitir\n\n"
+                        "Luego recarga la página e intenta de nuevo."
+                    )
+                elif code == 2:
+                    st.error(
+                        "📡 **No se pudo obtener tu posición.**\n\n"
+                        "Posibles causas:\n"
+                        "- **GPS apagado** en tu dispositivo → actívalo en Ajustes → Ubicación\n"
+                        "- Sin señal GPS, WiFi o red móvil disponible\n"
+                        "- Estás en un entorno sin cobertura\n\n"
+                        "Enciende el GPS, conéctate a una red y vuelve a intentarlo."
+                    )
+                elif code == 3:
+                    st.warning(
+                        "⏱️ **Tiempo de espera agotado.**\n\n"
+                        "El GPS tardó demasiado en responder. Verifica que:\n"
+                        "- El GPS esté activado\n"
+                        "- Tengas buena señal o conexión a internet\n\n"
+                        "Luego haz clic en Reintentar."
+                    )
+                else:
+                    st.error(f"❌ Error GPS inesperado: {msg}")
+
+                if st.button("🔄 Reintentar"):
+                    st.session_state.pop("get_gps", None)
+                    st.rerun()
+
             else:
-                st.error(f"❌ Error GPS: {coords}")
+                st.error(f"❌ Respuesta inesperada del GPS: {coords}")
                 st.session_state["gps_triggered"] = False
                 if st.button("🔄 Reintentar"):
+                    st.session_state.pop("get_gps", None)
                     st.rerun()
 
     st.stop()
+
 
 # ── 2. Coordenadas capturadas ──────────────────────────────────────
 my_lat = st.session_state["my_lat"]
@@ -112,20 +157,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
-col1.metric(" Latitud",  f"{my_lat:.6f}")
+col1.metric("🌐 Latitud",  f"{my_lat:.6f}")
 col2.metric("📍 Longitud", f"{my_lon:.6f}")
 
 # Botón para volver a capturar
-# ✅ Después — elimina solo si existe
 if st.button("🔄 Actualizar ubicación"):
     st.session_state["my_lat"] = None
     st.session_state["my_lon"] = None
-    st.session_state.pop("get_gps", None)   # ← no explota si no existe
+    st.session_state.pop("get_gps", None)
     st.session_state["gps_triggered"] = False
     st.rerun()
 
 map_data = pd.DataFrame([{"lat": my_lat, "lon": my_lon}])
 st.map(map_data, zoom=15)
+
 
 # ── 3. Lista de direcciones ────────────────────────────────────────
 direcciones = [
@@ -135,17 +180,21 @@ direcciones = [
     "Carrera 103b # 154 - 61, Bogotá, Colombia",
 ]
 
+
 @st.cache_data
 def geocode_lista(dirs):
     geolocator = Nominatim(user_agent="dairon_geoapp")
     return [geolocator.geocode(d) for d in dirs]
 
+
 with st.spinner("🗺️ Geocodificando direcciones…"):
     lugares = geocode_lista(direcciones)
+
 
 # ── 4. Selectbox ───────────────────────────────────────────────────
 opciones_dir = [d for d, p in zip(direcciones, lugares) if p]
 dir_seleccionada = st.selectbox("Selecciona una dirección:", opciones_dir)
+
 
 if dir_seleccionada:
     idx = opciones_dir.index(dir_seleccionada)
