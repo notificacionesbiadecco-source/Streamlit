@@ -236,7 +236,7 @@ def buscar_pdv(searchterm: str) -> list:
     # Retorna tuplas (texto visible, label completo)
     return [
         (
-            f"{row['pdv']}  —  {row['direccion']}",  # lo que ve el usuario
+            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad']}",  # lo que ve el usuario
             row["_label"]                             # valor interno
         )
         for _, row in resultados.iterrows()
