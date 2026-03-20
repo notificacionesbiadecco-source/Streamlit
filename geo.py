@@ -172,7 +172,7 @@ layer = pdk.Layer(
     get_radius=20,
     radius_min_pixels=6,
     radius_max_pixels=18,
-    # pickable=True,
+    pickable=True,
 )
 
 view_state = pdk.ViewState(
@@ -185,7 +185,7 @@ view_state = pdk.ViewState(
 st.pydeck_chart(pdk.Deck(
     layers=[layer],
     initial_view_state=view_state,
-    map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+    map_style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
 ))
 
 
@@ -242,6 +242,7 @@ if dir_seleccionada:
             response = supabase.table("registros_gps").insert(registro).execute()
             if response.data:
                 st.success("✅ Registro guardado correctamente en Supabase")
+                st.balloons()
             else:
                 st.error("❌ No se pudo guardar el registro")
         except Exception as e:
