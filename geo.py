@@ -5,6 +5,7 @@ from geopy.geocoders import Nominatim
 from supabase import create_client
 from datetime import datetime
 from streamlit_js_eval import streamlit_js_eval
+import pydeck as pdk
 
 
 st.title("GPS Actual + Selecciona Dirección Cercana")
@@ -99,7 +100,6 @@ if st.session_state["my_lat"] is None:
 
                 st.session_state["gps_triggered"] = False
 
-                # ── Mensajes según código de error ──────────────────
                 if code == 1:
                     st.warning(
                         "🔒 **Permiso de ubicación denegado.**\n\n"
@@ -168,8 +168,31 @@ if st.button("🔄 Actualizar ubicación"):
     st.session_state["gps_triggered"] = False
     st.rerun()
 
-map_data = pd.DataFrame([{"lat": my_lat, "lon": my_lon}])
-st.map(map_data, zoom=15)
+
+# ── Mapa con marcador pequeño (pydeck) ────────────────────────────
+layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=[{"lat": my_lat, "lon": my_lon}],
+    get_position="[lon, lat]",
+    get_color=[220, 50, 50, 200],
+    get_radius=30,
+    radius_min_pixels=6,
+    radius_max_pixels=18,
+    pickable=True,
+)
+
+view_state = pdk.ViewState(
+    latitude=my_lat,
+    longitude=my_lon,
+    zoom=15,
+    pitch=0,
+)
+
+st.pydeck_chart(pdk.Deck(
+    layers=[layer],
+    initial_view_state=view_state,
+    map_style="mapbox://styles/mapbox/dark-v10",
+))
 
 
 # ── 3. Lista de direcciones ────────────────────────────────────────
