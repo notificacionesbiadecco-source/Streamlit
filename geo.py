@@ -228,25 +228,41 @@ if dir_seleccionada:
     # st.map(df_mapa, zoom=13)
 
     # ── 5. Guardar en Supabase ─────────────────────────────────────
-    if st.button("💾 Guardar registro en servidor"):
-        registro = {
-            "created_at":             datetime.now().isoformat(),
-            "lat_actual":             my_lat,
-            "lon_actual":             my_lon,
-            "direccion_seleccionada": dir_seleccionada,
-            # "lat_destino":            lat_sel,
-            # "lon_destino":            lon_sel,
-            # "distancia_km":           round(dist, 4)
-        }
-        try:
-            response = supabase.table("registros_gps").insert(registro).execute()
-            if response.data:
-                st.success("✅ Registro guardado correctamente en Supabase")
-                st.balloons()
-            else:
-                st.error("❌ No se pudo guardar el registro")
-        except Exception as e:
-            st.error(f"❌ Error al guardar: {e}")
+    if "registro_guardado" not in st.session_state:
+        st.session_state["registro_guardado"] = False
+
+    # Si ya se guardó, mostrar solo el botón de actualizar
+    if st.session_state["registro_guardado"]:
+        st.success("✅ Registro guardado correctamente en Supabase")
+        st.balloons() if st.session_state.get("mostrar_balloons") else None
+        st.session_state["mostrar_balloons"] = False  # solo lanza balloons una vez
+
+        if st.button("🔄 Actualizar ubicación"):
+            st.session_state["my_lat"] = None
+            st.session_state["my_lon"] = None
+            st.session_state.pop("get_gps", None)
+            st.session_state["gps_triggered"] = False
+            st.session_state["registro_guardado"] = False
+            st.rerun()
+
+    else:
+        if st.button("💾 Guardar registro en servidor"):
+            registro = {
+                "created_at":             datetime.now().isoformat(),
+                "lat_actual":             my_lat,
+                "lon_actual":             my_lon,
+                "direccion_seleccionada": dir_seleccionada,
+            }
+            try:
+                response = supabase.table("registros_gps").insert(registro).execute()
+                if response.data:
+                    st.session_state["registro_guardado"] = True
+                    st.session_state["mostrar_balloons"] = True
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo guardar el registro")
+            except Exception as e:
+                st.error(f"❌ Error al guardar: {e}")
 
     # # ── 6. Historial ───────────────────────────────────────────────
     # with st.expander("📋 Ver historial de registros"):
