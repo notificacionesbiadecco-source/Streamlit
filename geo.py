@@ -53,7 +53,7 @@ if st.session_state["my_lat"] is None:
     if not st.session_state["gps_triggered"]:
         st.markdown("<br>", unsafe_allow_html=True)
         col = st.columns([1, 3, 1])[1]
-        if col.button("📍  Obtener mi ubicación GPS", use_container_width=True, type="primary"):
+        if col.button("📡  Obtener mi ubicación GPS", use_container_width=True, type="primary"):
             st.session_state["gps_triggered"] = True
             st.rerun()
     else:
@@ -65,7 +65,6 @@ if st.session_state["my_lat"] is None:
         </div>
         """, unsafe_allow_html=True)
 
-        # ── JS: retorna { lat, lon } en éxito o { error_code, error_msg } en fallo
         coords = streamlit_js_eval(
             js_expressions="""
                 new Promise((resolve) => {
@@ -88,7 +87,6 @@ if st.session_state["my_lat"] is None:
 
         if coords is not None:
             if isinstance(coords, dict) and "lat" in coords:
-                # ✅ Éxito
                 st.session_state["my_lat"] = coords["lat"]
                 st.session_state["my_lon"] = coords["lon"]
                 st.session_state["gps_triggered"] = False
@@ -97,13 +95,12 @@ if st.session_state["my_lat"] is None:
             elif isinstance(coords, dict) and "error_code" in coords:
                 code = coords["error_code"]
                 msg  = coords.get("error_msg", "Error desconocido")
-
                 st.session_state["gps_triggered"] = False
 
                 if code == 1:
                     st.warning(
                         "🔒 **Permiso de ubicación denegado.**\n\n"
-                        "Debes permitir el acceso a la ubicación en tu navegador o celular:\n"
+                        "Debes permitir el acceso a la ubicación en tu navegador o celular:\n\n"
                         "Luego recarga la página e intenta de nuevo."
                     )
                 elif code == 2:
@@ -158,7 +155,6 @@ col1, col2 = st.columns(2)
 col1.metric("🌐 Latitud",  f"{my_lat:.6f}")
 col2.metric("📍 Longitud", f"{my_lon:.6f}")
 
-# Botón para volver a capturar
 if st.button("🔄 Actualizar ubicación"):
     st.session_state["my_lat"] = None
     st.session_state["my_lon"] = None
@@ -167,7 +163,7 @@ if st.button("🔄 Actualizar ubicación"):
     st.rerun()
 
 
-# ── Mapa con marcador pequeño (pydeck) ────────────────────────────
+# ── Mapa con marcador pequeño (pydeck, sin token) ─────────────────
 layer = pdk.Layer(
     "ScatterplotLayer",
     data=[{"lat": my_lat, "lon": my_lon}],
@@ -189,7 +185,7 @@ view_state = pdk.ViewState(
 st.pydeck_chart(pdk.Deck(
     layers=[layer],
     initial_view_state=view_state,
-    map_style="mapbox://styles/mapbox/dark-v10",
+    map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
 ))
 
 
