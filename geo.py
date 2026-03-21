@@ -227,24 +227,47 @@ df_pdv = cargar_pdv()
 st.markdown(f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>", unsafe_allow_html=True)
 
 
-# ── 4. Searchbox con filtro en tiempo real ────────────────────────
+# ── 4. Filtro por ciudad + Searchbox ─────────────────────────────
+
+# --- 4a. Selector de ciudad ---
+ciudades = sorted(df_pdv["ciudad"].dropna().unique().tolist())
+
+ciudad_filtrada = st.selectbox(
+    "🏙️ Filtra por ciudad:",
+    options=["— Selecciona una ciudad —"] + ciudades,
+    index=0,
+    key="selectbox_ciudad",
+)
+
+if ciudad_filtrada == "— Selecciona una ciudad —":
+    st.info("👆 Selecciona una ciudad para ver los puntos de venta.")
+    st.stop()
+
+# --- 4b. DataFrame filtrado por ciudad ---
+df_ciudad = df_pdv[df_pdv["ciudad"] == ciudad_filtrada].copy()
+
+st.markdown(
+    f"<small style='color:#6b8fa8'>✅ {len(df_ciudad)} puntos de venta en <b>{ciudad_filtrada}</b></small>",
+    unsafe_allow_html=True,
+)
+
+# --- 4c. Searchbox solo sobre PDVs de la ciudad seleccionada ---
 def buscar_pdv(searchterm: str) -> list:
     if not searchterm:
         return []
-    mask = df_pdv["_label"].str.contains(searchterm.strip(), case=False, na=False)
-    resultados = df_pdv[mask]
-    # Retorna tuplas (texto visible, label completo)
+    mask = df_ciudad["_label"].str.contains(searchterm.strip(), case=False, na=False)
+    resultados = df_ciudad[mask]
     return [
         (
-            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad']}",  # lo que ve el usuario
-            row["_label"]                             # valor interno
+            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad']}",
+            row["_label"],
         )
         for _, row in resultados.iterrows()
     ]
 
 dir_seleccionada_label = st_searchbox(
     buscar_pdv,
-    placeholder="🔍 Escribe nombre, EAN, dirección o ciudad...",
+    placeholder="🔍 Escribe nombre, EAN o dirección...",
     label="Busca el punto de venta:",
     key="searchbox_pdv",
     default_options=[],
@@ -254,8 +277,8 @@ if not dir_seleccionada_label:
     st.info("👆 Escribe para buscar un punto de venta.")
     st.stop()
 
-# Fila seleccionada
-row = df_pdv[df_pdv["_label"] == dir_seleccionada_label].iloc[0]
+# Fila seleccionada — buscar en df_ciudad (o df_pdv, es lo mismo)
+row = df_ciudad[df_ciudad["_label"] == dir_seleccionada_label].iloc[0]
 
 direccion_sel = str(row["direccion"])
 ciudad_sel    = str(row["ciudad"])
