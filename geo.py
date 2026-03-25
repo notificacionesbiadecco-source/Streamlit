@@ -9,15 +9,12 @@ import pydeck as pdk
 import os
 from streamlit_searchbox import st_searchbox
 
-
 st.title("GPS Actual + Selecciona Dirección Cercana")
-
 
 # ── Conexión Supabase ──────────────────────────────────────────────
 SUPABASE_URL = "https://rtzfscetcoyxeodqwpbd.supabase.co"
 SUPABASE_KEY = "sb_publishable_aeRDjSzc5gmcFkT13mmZvA_jKWEaQZy"
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)  # [web:7]
 
 # ── CSS botón de carga ─────────────────────────────────────────────
 st.markdown("""
@@ -41,12 +38,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ── 1. Captura GPS ─────────────────────────────────────────────────
 if "my_lat" not in st.session_state:
     st.session_state["my_lat"] = None
     st.session_state["my_lon"] = None
-
 
 if st.session_state["my_lat"] is None:
 
@@ -138,7 +133,6 @@ if st.session_state["my_lat"] is None:
 
     st.stop()
 
-
 # ── 2. Coordenadas capturadas ──────────────────────────────────────
 my_lat = st.session_state["my_lat"]
 my_lon = st.session_state["my_lon"]
@@ -163,7 +157,6 @@ if st.button("🔄 Actualizar ubicación"):
     st.session_state.pop("get_gps", None)
     st.session_state["gps_triggered"] = False
     st.rerun()
-
 
 # ── Mapa con marcador pequeño (pydeck, sin token) ──────────────────
 layer = pdk.Layer(
@@ -190,11 +183,8 @@ st.pydeck_chart(pdk.Deck(
     map_style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
 ))
 
-
 # ── 3. Carga del Excel desde el servidor ──────────────────────────
-# 📁 Pon el archivo en la misma carpeta que app.py o ajusta la ruta
 EXCEL_PATH = os.path.join(os.path.dirname(__file__), "FORMATO.xlsx")
-
 
 @st.cache_data
 def cargar_pdv():
@@ -206,32 +196,54 @@ def cargar_pdv():
 
     df.columns = df.columns.str.strip().str.lower()
 
-    required = {"direccion", "ciudad", "pdv", "ean_pdv"}
+    # ahora requerimos también 'canal'
+    required = {"direccion", "ciudad", "pdv", "ean_pdv", "canal"}
     missing = required - set(df.columns)
     if missing:
         st.error(f"❌ Faltan columnas en el Excel: {', '.join(missing)}")
         st.stop()
 
     df["ean_pdv"] = df["ean_pdv"].astype(str).str.strip()
+
     df["_label"] = (
         df["pdv"].astype(str) + "  |  " +
         df["ean_pdv"].astype(str) + "  |  " +
         df["direccion"].astype(str) + "  |  " +
-        df["ciudad"].astype(str)
+        df["ciudad"].astype(str) + "  |  " +
+        df["canal"].astype(str)
     )
     return df
 
-
 df_pdv = cargar_pdv()
+st.markdown(
+    f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>",
+    unsafe_allow_html=True,
+)
 
-st.markdown(f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>", unsafe_allow_html=True)
+# ── 4. Filtro por canal + ciudad + Searchbox ──────────────────────
 
+# 4a. Selector de canal
+canales = sorted(df_pdv["canal"].dropna().unique().tolist())
+canal_filtrado = st.selectbox(
+    "🏷️ Filtra por canal:",
+    options=["— Selecciona un canal —"] + canales,
+    index=0,
+    key="selectbox_canal",
+)
 
-# ── 4. Filtro por ciudad + Searchbox ─────────────────────────────
+if canal_filtrado == "— Selecciona un canal —":
+    st.info("👆 Selecciona un canal para continuar.")
+    st.stop()
 
-# --- 4a. Selector de ciudad ---
-ciudades = sorted(df_pdv["ciudad"].dropna().unique().tolist())
+# 4b. Filtrar por canal
+df_canal = df_pdv[df_pdv["canal"] == canal_filtrado].copy()
+st.markdown(
+    f"<small style='color:#6b8fa8'>✅ {len(df_canal)} puntos de venta en canal <b>{canal_filtrado}</b></small>",
+    unsafe_allow_html=True,
+)
 
+# 4c. Selector de ciudad dentro del canal
+ciudades = sorted(df_canal["ciudad"].dropna().unique().tolist())
 ciudad_filtrada = st.selectbox(
     "🏙️ Filtra por ciudad:",
     options=["— Selecciona una ciudad —"] + ciudades,
@@ -243,15 +255,15 @@ if ciudad_filtrada == "— Selecciona una ciudad —":
     st.info("👆 Selecciona una ciudad para ver los puntos de venta.")
     st.stop()
 
-# --- 4b. DataFrame filtrado por ciudad ---
-df_ciudad = df_pdv[df_pdv["ciudad"] == ciudad_filtrada].copy()
+# 4d. DataFrame filtrado por canal + ciudad
+df_ciudad = df_canal[df_canal["ciudad"] == ciudad_filtrada].copy()
 
 st.markdown(
-    f"<small style='color:#6b8fa8'>✅ {len(df_ciudad)} puntos de venta en <b>{ciudad_filtrada}</b></small>",
+    f"<small style='color:#6b8fa8'>✅ {len(df_ciudad)} puntos de venta en <b>{ciudad_filtrada}</b> / canal <b>{canal_filtrado}</b></small>",
     unsafe_allow_html=True,
 )
 
-# --- 4c. Searchbox solo sobre PDVs de la ciudad seleccionada ---
+# 4e. Searchbox
 def buscar_pdv(searchterm: str) -> list:
     if not searchterm:
         return []
@@ -259,7 +271,7 @@ def buscar_pdv(searchterm: str) -> list:
     resultados = df_ciudad[mask]
     return [
         (
-            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad']}",
+            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad']} - {row['canal']}",
             row["_label"],
         )
         for _, row in resultados.iterrows()
@@ -277,13 +289,13 @@ if not dir_seleccionada_label:
     st.info("👆 Escribe para buscar un punto de venta.")
     st.stop()
 
-# Fila seleccionada — buscar en df_ciudad (o df_pdv, es lo mismo)
 row = df_ciudad[df_ciudad["_label"] == dir_seleccionada_label].iloc[0]
 
 direccion_sel = str(row["direccion"])
 ciudad_sel    = str(row["ciudad"])
 pdv_sel       = str(row["pdv"])
 ean_pdv_sel   = str(row["ean_pdv"])
+canal_sel     = str(row["canal"])
 
 # Tarjeta de información del PDV seleccionado
 st.markdown(f"""
@@ -295,11 +307,11 @@ st.markdown(f"""
 ">
     <b style='color:#00c6ff'>🏪 PDV:</b> <span style='color:#fff'>{pdv_sel}</span><br>
     <b style='color:#00c6ff'>🏙️ Ciudad:</b> <span style='color:#fff'>{ciudad_sel}</span><br>
+    <b style='color:#00c6ff'>🏷️ Canal:</b> <span style='color:#fff'>{canal_sel}</span><br>
     <b style='color:#00c6ff'>📦 EAN:</b> <span style='color:#fff'>{ean_pdv_sel}</span><br>
     <b style='color:#00c6ff'>🗺️ Dirección:</b> <span style='color:#fff'>{direccion_sel}</span>
 </div>
 """, unsafe_allow_html=True)
-
 
 # ── 5. Guardar en Supabase ─────────────────────────────────────────
 if "registro_guardado" not in st.session_state:
@@ -307,7 +319,6 @@ if "registro_guardado" not in st.session_state:
 
 if st.session_state["registro_guardado"]:
     st.success("✅ Registro guardado correctamente en Supabase")
-
     if st.session_state.get("mostrar_balloons"):
         st.balloons()
         st.session_state["mostrar_balloons"] = False
@@ -328,10 +339,11 @@ else:
             "direccion_seleccionada": direccion_sel,
             "ciudad":                 ciudad_sel,
             "pdv":                    pdv_sel,
-            "ean_pvd":                ean_pdv_sel,  # ⚠️ nombre exacto en tu tabla Supabase
+            "ean_pvd":                ean_pdv_sel,   # nombre de columna en tu tabla
+            "canal":                  canal_sel,     # nueva columna canal
         }
         try:
-            response = supabase.table("registros_gps").insert(registro).execute()
+            response = supabase.table("registros_gps").insert(registro).execute()  # [web:7]
             if response.data:
                 st.session_state["registro_guardado"] = True
                 st.session_state["mostrar_balloons"] = True
@@ -340,20 +352,3 @@ else:
                 st.error("❌ No se pudo guardar el registro")
         except Exception as e:
             st.error(f"❌ Error al guardar: {e}")
-
-
-# ── 6. Historial ───────────────────────────────────────────────────
-# with st.expander("📋 Ver historial de registros"):
-#     try:
-#         response = supabase.table("registros_gps") \
-#                            .select("*") \
-#                            .order("created_at", desc=True) \
-#                            .limit(50) \
-#                            .execute()
-#         if response.data:
-#             df_hist = pd.DataFrame(response.data)
-#             st.dataframe(df_hist, use_container_width=True)
-#         else:
-#             st.info("Aún no hay registros guardados.")
-#     except Exception as e:
-#         st.error(f"❌ Error al cargar historial: {e}")
