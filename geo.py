@@ -323,7 +323,6 @@ if st.session_state["registro_guardado"]:
 else:
     if st.button("💾 Guardar registro en servidor"):
         registro = {
-            "created_at":             datetime.now().isoformat(),
             "lat_actual":             my_lat,
             "lon_actual":             my_lon,
             "direccion_seleccionada": direccion_sel,
