@@ -192,7 +192,6 @@ st.pydeck_chart(pdk.Deck(
 
 
 # ── 3. Carga del Excel desde el servidor ──────────────────────────
-# 📁 Pon el archivo en la misma carpeta que app.py o ajusta la ruta
 EXCEL_PATH = os.path.join(os.path.dirname(__file__), "FORMATO AZULK.xlsx")
 
 
@@ -204,9 +203,14 @@ def cargar_pdv():
         st.error(f"❌ No se encontró el archivo: **{EXCEL_PATH}**. Verifica que esté en el servidor.")
         st.stop()
 
-    df.columns = df.columns.str.strip().str.lower()
+    # Normalizar nombres: minúsculas y espacios → guión bajo
+    df.columns = (
+        df.columns.str.strip()
+                  .str.lower()
+                  .str.replace(" ", "_")
+    )
 
-    required = {"direccion", "ciudad", "pdv", "ean_pdv"}
+    required = {"direccion", "ciudad_base", "ciudad_pdv", "pdv", "ean_pdv"}
     missing = required - set(df.columns)
     if missing:
         st.error(f"❌ Faltan columnas en el Excel: {', '.join(missing)}")
@@ -217,7 +221,8 @@ def cargar_pdv():
         df["pdv"].astype(str) + "  |  " +
         df["ean_pdv"].astype(str) + "  |  " +
         df["direccion"].astype(str) + "  |  " +
-        df["ciudad"].astype(str)
+        df["ciudad_pdv"].astype(str) + "  |  " +
+        df["ciudad_base"].astype(str)
     )
     return df
 
@@ -227,31 +232,55 @@ df_pdv = cargar_pdv()
 st.markdown(f"<small style='color:#6b8fa8'>✅ {len(df_pdv)} puntos de venta cargados</small>", unsafe_allow_html=True)
 
 
-# ── 4. Filtro por ciudad + Searchbox ─────────────────────────────
+# ── 4. Filtros encadenados: ciudad base → ciudad PDV → PDV ────────
 
-# --- 4a. Selector de ciudad ---
-ciudades = sorted(df_pdv["ciudad"].dropna().unique().tolist())
+# --- 4a. Selector de ciudad base ---
+ciudades_base = sorted(df_pdv["ciudad_base"].dropna().unique().tolist())
 
-ciudad_filtrada = st.selectbox(
-    "🏙️ Filtra por ciudad:",
-    options=["— Selecciona una ciudad —"] + ciudades,
+ciudad_base_sel = st.selectbox(
+    "🏙️ Filtra por ciudad base:",
+    options=["— Selecciona una ciudad base —"] + ciudades_base,
     index=0,
-    key="selectbox_ciudad",
+    key="selectbox_ciudad_base",
 )
 
-if ciudad_filtrada == "— Selecciona una ciudad —":
-    st.info("👆 Selecciona una ciudad para ver los puntos de venta.")
+if ciudad_base_sel == "— Selecciona una ciudad base —":
+    st.info("👆 Selecciona una ciudad base para continuar.")
     st.stop()
 
-# --- 4b. DataFrame filtrado por ciudad ---
-df_ciudad = df_pdv[df_pdv["ciudad"] == ciudad_filtrada].copy()
+# --- 4b. Selector de ciudad PDV (filtrado por ciudad base) ---
+df_base = df_pdv[df_pdv["ciudad_base"] == ciudad_base_sel].copy()
+
+ciudades_pdv = sorted(df_base["ciudad_pdv"].dropna().unique().tolist())
+
+ciudad_pdv_sel = st.selectbox(
+    "📍 Filtra por ciudad del punto de venta:",
+    options=["— Selecciona una ciudad PDV —"] + ciudades_pdv,
+    index=0,
+    key="selectbox_ciudad_pdv",
+)
+
+# ── Reset del searchbox si cambió ciudad base o ciudad PDV ────────
+if st.session_state.get("_last_ciudad_base") != ciudad_base_sel or \
+   st.session_state.get("_last_ciudad_pdv") != ciudad_pdv_sel:
+    st.session_state["_last_ciudad_base"] = ciudad_base_sel
+    st.session_state["_last_ciudad_pdv"]  = ciudad_pdv_sel
+    st.session_state.pop("searchbox_pdv", None)   # limpia el searchbox
+    st.rerun()
+
+if ciudad_pdv_sel == "— Selecciona una ciudad PDV —":
+    st.info("👆 Selecciona una ciudad de punto de venta para continuar.")
+    st.stop()
+
+# --- 4c. DataFrame filtrado por ciudad PDV ---
+df_ciudad = df_base[df_base["ciudad_pdv"] == ciudad_pdv_sel].copy()
 
 st.markdown(
-    f"<small style='color:#6b8fa8'>✅ {len(df_ciudad)} puntos de venta en <b>{ciudad_filtrada}</b></small>",
+    f"<small style='color:#6b8fa8'>✅ {len(df_ciudad)} puntos de venta en <b>{ciudad_pdv_sel}</b></small>",
     unsafe_allow_html=True,
 )
 
-# --- 4c. Searchbox solo sobre PDVs de la ciudad seleccionada ---
+# --- 4d. Searchbox sobre PDVs de la ciudad PDV seleccionada ---
 def buscar_pdv(searchterm: str) -> list:
     if not searchterm:
         return []
@@ -259,7 +288,7 @@ def buscar_pdv(searchterm: str) -> list:
     resultados = df_ciudad[mask]
     return [
         (
-            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad']}",
+            f"{row['pdv']}  —  {row['direccion']} - {row['ean_pdv']} - {row['ciudad_pdv']}",
             row["_label"],
         )
         for _, row in resultados.iterrows()
@@ -277,13 +306,19 @@ if not dir_seleccionada_label:
     st.info("👆 Escribe para buscar un punto de venta.")
     st.stop()
 
-# Fila seleccionada — buscar en df_ciudad (o df_pdv, es lo mismo)
-row = df_ciudad[df_ciudad["_label"] == dir_seleccionada_label].iloc[0]
+# Fila seleccionada — validación defensiva
+matches = df_ciudad[df_ciudad["_label"] == dir_seleccionada_label]
+if matches.empty:
+    st.session_state.pop("searchbox_pdv", None)
+    st.rerun()
 
-direccion_sel = str(row["direccion"])
-ciudad_sel    = str(row["ciudad"])
-pdv_sel       = str(row["pdv"])
-ean_pdv_sel   = str(row["ean_pdv"])
+row = matches.iloc[0]
+
+direccion_sel   = str(row["direccion"])
+ciudad_base_row = str(row["ciudad_base"])
+ciudad_sel      = str(row["ciudad_pdv"])
+pdv_sel         = str(row["pdv"])
+ean_pdv_sel     = str(row["ean_pdv"])
 
 # Tarjeta de información del PDV seleccionado
 st.markdown(f"""
@@ -294,7 +329,8 @@ st.markdown(f"""
     line-height: 1.8;
 ">
     <b style='color:#00c6ff'>🏪 PDV:</b> <span style='color:#fff'>{pdv_sel}</span><br>
-    <b style='color:#00c6ff'>🏙️ Ciudad:</b> <span style='color:#fff'>{ciudad_sel}</span><br>
+    <b style='color:#00c6ff'>🏙️ Ciudad base:</b> <span style='color:#fff'>{ciudad_base_row}</span><br>
+    <b style='color:#00c6ff'>📍 Ciudad PDV:</b> <span style='color:#fff'>{ciudad_sel}</span><br>
     <b style='color:#00c6ff'>📦 EAN:</b> <span style='color:#fff'>{ean_pdv_sel}</span><br>
     <b style='color:#00c6ff'>🗺️ Dirección:</b> <span style='color:#fff'>{direccion_sel}</span>
 </div>
@@ -326,9 +362,10 @@ else:
             "lat_actual":             my_lat,
             "lon_actual":             my_lon,
             "direccion_seleccionada": direccion_sel,
+            "ciudad_base":            ciudad_base_row,
             "ciudad":                 ciudad_sel,
             "pdv":                    pdv_sel,
-            "ean_pvd":                ean_pdv_sel,  # ⚠️ nombre exacto en tu tabla Supabase
+            "ean_pvd":                ean_pdv_sel,
         }
         try:
             response = supabase.table("azulk_registros_gps").insert(registro).execute()
